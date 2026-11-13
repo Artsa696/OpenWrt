@@ -22,7 +22,7 @@
 # Lab 4 - Yeu cau 1: thay "W I R E L E S S   F R E E D O M" tren banner bang ten nhom.
 # GROUP_NAME duoc truyen tu workflow (input group_name), mac dinh "NHOM 10".
 BANNER_FILE=package/base-files/files/etc/banner
-GROUP_NAME="${GROUP_NAME:-NHOM 1}"
+GROUP_NAME="${GROUP_NAME:-NHOM 10}"
 # Chi giu ky tu an toan cho sed, viet hoa, chen dau cach giua cac ky tu giong banner goc
 SAFE_NAME=$(printf '%s' "$GROUP_NAME" | tr -cd 'A-Za-z0-9 _.-' | tr '[:lower:]' '[:upper:]')
 SPACED_NAME=$(printf '%s' "$SAFE_NAME" | sed -e 's/\(.\)/\1 /g' -e 's/ *$//')
