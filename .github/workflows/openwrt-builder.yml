@@ -9,16 +9,44 @@
 # This is free software, licensed under the MIT License.
 # See /LICENSE for more information.
 #
+# Lab 4 - Bien dich firmware OpenWrt cho Raspberry Pi 3
+#   Target   : Broadcom BCM27xx
+#   Subtarget: BCM2710 (64 bit)
+#   Device   : Raspberry Pi 3 (rpi-3)
+#   Version  : OpenWrt v23.05.5 (ma nguon chinh thuc)
+#
 
 name: OpenWrt Builder
 
 on:
   repository_dispatch:
   workflow_dispatch:
+    inputs:
+      group_name:
+        description: 'Ten nhom hien thi tren banner console (thay cho WIRELESS FREEDOM)'
+        required: false
+        default: 'NHOM 10'
+      openwrt_version:
+        description: 'Tag/branch OpenWrt can build'
+        required: false
+        default: 'v23.05.5'
+  push:
+    branches: [ main ]
+    paths:
+      - '.config'
+      - 'diy-part1.sh'
+      - 'diy-part2.sh'
+      - 'files/**'
+      - '.github/workflows/openwrt-builder.yml'
+
+concurrency:
+  group: openwrt-build-${{ github.ref }}
+  cancel-in-progress: true
 
 env:
-  REPO_URL: https://github.com/coolsnowwolf/lede
-  REPO_BRANCH: master
+  REPO_URL: https://github.com/openwrt/openwrt
+  REPO_BRANCH: ${{ github.event.inputs.openwrt_version || 'v23.05.5' }}
+  GROUP_NAME: ${{ github.event.inputs.group_name || 'NHOM 10' }}
   FEEDS_CONF: feeds.conf.default
   CONFIG_FILE: .config
   DIY_P1_SH: diy-part1.sh
@@ -30,7 +58,9 @@ env:
 
 jobs:
   build:
+    # OpenWrt 23.05 can python3-distutils -> Ubuntu 22.04 (Python 3.10) la an toan nhat.
     runs-on: ubuntu-22.04
+    timeout-minutes: 360
     permissions:
       contents: write
       actions: write
@@ -46,7 +76,7 @@ jobs:
         sudo rm -rf /etc/apt/sources.list.d/* /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
         sudo docker image prune --all --force
         sudo -E apt-get -qq update
-        sudo -E apt-get -qq install -y ack antlr3 asciidoc autoconf automake autopoint binutils bison build-essential bzip2 ccache cmake cpio curl device-tree-compiler fastjar flex gawk gettext gcc-multilib g++-multilib git gperf haveged help2man intltool libc6-dev-i386 libelf-dev libfuse-dev libglib2.0-dev libgmp3-dev libltdl-dev libmpc-dev libmpfr-dev libncurses5-dev libncursesw5-dev libpython3-dev libreadline-dev libssl-dev libtool lrzsz mkisofs msmtp ninja-build p7zip p7zip-full patch pkgconf python3 python3-pyelftools python3-setuptools qemu-utils rsync scons squashfs-tools subversion swig texinfo uglifyjs upx-ucl unzip vim wget xmlto xxd zlib1g-dev
+        sudo -E apt-get -qq install -y ack antlr3 asciidoc autoconf automake autopoint binutils bison build-essential bzip2 ccache clang cmake cpio curl device-tree-compiler fastjar file flex gawk gettext gcc-multilib g++-multilib git gperf haveged help2man intltool libc6-dev-i386 libelf-dev libfuse-dev libglib2.0-dev libgmp3-dev libltdl-dev libmpc-dev libmpfr-dev libncurses5-dev libncursesw5-dev libpython3-dev libreadline-dev libssl-dev libtool lrzsz mkisofs msmtp ninja-build p7zip p7zip-full patch pkgconf python3 python3-distutils python3-pyelftools python3-setuptools qemu-utils rsync scons squashfs-tools subversion swig texinfo uglifyjs upx-ucl unzip vim wget xmlto xxd zlib1g-dev
         sudo -E apt-get -qq autoremove --purge
         sudo -E apt-get -qq clean
         sudo timedatectl set-timezone "$TZ"
@@ -57,8 +87,10 @@ jobs:
       working-directory: /workdir
       run: |
         df -hT $PWD
+        echo "Cloning $REPO_URL @ $REPO_BRANCH"
         git clone $REPO_URL -b $REPO_BRANCH openwrt
         ln -sf /workdir/openwrt $GITHUB_WORKSPACE/openwrt
+        cd openwrt && git log -1 --oneline
 
     - name: Load custom feeds
       run: |
@@ -86,6 +118,13 @@ jobs:
       run: |
         cd openwrt
         make defconfig
+        # Chan build sai thiet bi: .config phai tro dung Raspberry Pi 3
+        if ! grep -q '^CONFIG_TARGET_bcm27xx_bcm2710_DEVICE_rpi-3=y' .config; then
+          echo "::error::.config khong chon Raspberry Pi 3 (bcm27xx/bcm2710/rpi-3)"
+          grep '^CONFIG_TARGET' .config | head -n 20
+          exit 1
+        fi
+        grep -E '^CONFIG_TARGET_bcm27xx|^CONFIG_PACKAGE_(luci|kmod-b43|kmod-brcmfmac)=' .config
         make download -j8
         find dl -size -1024c -exec ls -l {} \;
         find dl -size -1024c -exec rm -f {} \;
@@ -118,6 +157,7 @@ jobs:
       run: |
         cd openwrt/bin/targets/*/*
         rm -rf packages
+        ls -lh
         echo "FIRMWARE=$PWD" >> $GITHUB_ENV
         echo "status=success" >> $GITHUB_OUTPUT
 
@@ -134,7 +174,7 @@ jobs:
       run: |
         echo "release_tag=$(date +"%Y.%m.%d-%H%M")" >> $GITHUB_OUTPUT
         touch release.txt
-        echo "OpenWrt Firmware built successfully on GitHub Actions." >> release.txt
+        echo "OpenWrt $REPO_BRANCH - Raspberry Pi 3 (bcm27xx/bcm2710) - $GROUP_NAME" >> release.txt
         echo "status=success" >> $GITHUB_OUTPUT
 
     - name: Upload firmware to release
@@ -150,5 +190,5 @@ jobs:
     - name: Delete workflow runs
       uses: Mattraks/delete-workflow-runs@v2
       with:
-        retain_days: 1
-        keep_minimum_runs: 3
+        retain_days: 7
+        keep_minimum_runs: 5
